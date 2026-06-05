@@ -38,6 +38,9 @@ class Game:
     short_name: str
     status: str
     status_detail: str
+    state: str
+    clock: str | None
+    period: int | None
     home: TeamScore
     away: TeamScore
 
@@ -59,17 +62,25 @@ def _parse_team(competitor: dict[str, Any]) -> TeamScore:
 
 def _parse_game(event: dict[str, Any]) -> Game:
     competition = event["competitions"][0]
-    status = competition["status"]["type"]
+    status = competition["status"]
+    status_type = status["type"]
     competitors = competition["competitors"]
 
     home = next(c for c in competitors if c["homeAway"] == "home")
     away = next(c for c in competitors if c["homeAway"] == "away")
 
+    state = status_type["state"]
+    clock = status.get("displayClock") if state == "in" else None
+    period = status.get("period") if state == "in" else None
+
     return Game(
         name=event["name"],
         short_name=event["shortName"],
-        status=status["description"],
-        status_detail=status.get("shortDetail", status["description"]),
+        status=status_type["description"],
+        status_detail=status_type.get("shortDetail", status_type["description"]),
+        state=state,
+        clock=clock,
+        period=period,
         home=_parse_team(home),
         away=_parse_team(away),
     )
