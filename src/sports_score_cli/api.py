@@ -33,6 +33,15 @@ class TeamScore:
 
 
 @dataclass(frozen=True)
+class BettingLines:
+    provider: str
+    spread_detail: str | None
+    over_under: float | None
+    home_moneyline: str | None
+    away_moneyline: str | None
+
+
+@dataclass(frozen=True)
 class Game:
     name: str
     short_name: str
@@ -43,6 +52,7 @@ class Game:
     period: int | None
     home: TeamScore
     away: TeamScore
+    betting_lines: BettingLines | None
 
 
 class ScoreboardError(Exception):
@@ -57,6 +67,25 @@ def _parse_team(competitor: dict[str, Any]) -> TeamScore:
         score=str(competitor.get("score", "0")),
         is_home=competitor["homeAway"] == "home",
         is_winner=competitor.get("winner"),
+    )
+
+
+def _parse_betting_lines(competition: dict[str, Any]) -> BettingLines | None:
+    odds_list = competition.get("odds")
+    if not odds_list:
+        return None
+
+    odds = odds_list[0]
+    provider_info = odds.get("provider", {})
+    provider = provider_info.get("displayName") or provider_info.get("name", "Unknown")
+    moneyline = odds.get("moneyline", {})
+
+    return BettingLines(
+        provider=provider,
+        spread_detail=odds.get("details"),
+        over_under=odds.get("overUnder"),
+        home_moneyline=moneyline.get("home", {}).get("close", {}).get("odds"),
+        away_moneyline=moneyline.get("away", {}).get("close", {}).get("odds"),
     )
 
 
@@ -83,6 +112,7 @@ def _parse_game(event: dict[str, Any]) -> Game:
         period=period,
         home=_parse_team(home),
         away=_parse_team(away),
+        betting_lines=_parse_betting_lines(competition),
     )
 
 
