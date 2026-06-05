@@ -1,1 +1,102 @@
 """ESPN API client for fetching sports scores."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+ESPN_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports"
+
+
+class League(StrEnum):
+    NBA = "nba"
+    NFL = "nfl"
+
+
+LEAGUE_PATHS: dict[League, str] = {
+    League.NBA: "basketball/nba",
+    League.NFL: "football/nfl",
+}
+
+
+@dataclass(frozen=True)
+class TeamScore:
+    name: str
+    abbreviation: str
+    score: str
+    is_home: bool
+    is_winner: bool | None
+
+
+@dataclass(frozen=True)
+class Game:
+    name: str
+    short_name: str
+    status: str
+    status_detail: str
+    home: TeamScore
+    away: TeamScore
+
+
+class ScoreboardError(Exception):
+    """Raised when the scoreboard cannot be fetched or parsed."""
+
+
+def _parse_team(competitor: dict[str, Any]) -> TeamScore:
+    team = competitor["team"]
+    return TeamScore(
+        name=team["displayName"],
+        abbreviation=team["abbreviation"],
+        score=str(competitor.get("score", "0")),
+        is_home=competitor["homeAway"] == "home",
+        is_winner=competitor.get("winner"),
+    )
+
+
+def _parse_game(event: dict[str, Any]) -> Game:
+    competition = event["competitions"][0]
+    status = competition["status"]["type"]
+    competitors = competition["competitors"]
+
+    home = next(c for c in competitors if c["homeAway"] == "home")
+    away = next(c for c in competitors if c["homeAway"] == "away")
+
+    return Game(
+        name=event["name"],
+        short_name=event["shortName"],
+        status=status["description"],
+        status_detail=status.get("shortDetail", status["description"]),
+        home=_parse_team(home),
+        away=_parse_team(away),
+    )
+
+
+def fetch_scoreboard(league: League | str) -> list[Game]:
+    """Fetch today's scoreboard for the given league."""
+    try:
+        league = League(league)
+    except ValueError as exc:
+        supported = ", ".join(league.value for league in League)
+        raise ScoreboardError(
+            f"Unsupported league '{league}'. Supported leagues: {supported}."
+        ) from exc
+
+    url = f"{ESPN_BASE_URL}/{LEAGUE_PATHS[league]}/scoreboard"
+    request = Request(url, headers={"User-Agent": "sports-score-cli/0.1.0"})
+
+    try:
+        with urlopen(request, timeout=10) as response:
+            data = json.load(response)
+    except HTTPError as exc:
+        raise ScoreboardError(f"ESPN API returned HTTP {exc.code}.") from exc
+    except URLError as exc:
+        raise ScoreboardError(f"Failed to reach ESPN API: {exc.reason}.") from exc
+    except json.JSONDecodeError as exc:
+        raise ScoreboardError("ESPN API returned invalid JSON.") from exc
+
+    events = data.get("events", [])
+    return [_parse_game(event) for event in events]

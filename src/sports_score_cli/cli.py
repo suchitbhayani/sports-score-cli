@@ -1,6 +1,9 @@
 import argparse
 import sys
 
+from sports_score_cli.api import ScoreboardError, fetch_scoreboard
+from sports_score_cli.format import format_scoreboard
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -27,8 +30,13 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.command == "live":
-        print(f"Fetching live {args.league.upper()} scores... (not implemented yet)")
-        sys.exit(0)
+        try:
+            games = fetch_scoreboard(args.league)
+        except ScoreboardError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        print(format_scoreboard(games, args.league))
 
 
 if __name__ == "__main__":
