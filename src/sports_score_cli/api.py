@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 ESPN_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports"
 
 
-class League(StrEnum):
+class League(str, Enum):
     NBA = "nba"
     NFL = "nfl"
 
